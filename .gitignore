@@ -1,0 +1,4 @@
+*.png
+test.py
+__pycache__/
+examples/
