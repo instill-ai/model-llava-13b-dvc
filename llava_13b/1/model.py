@@ -1,6 +1,6 @@
 # pylint: skip-file
 import traceback
-
+import numpy as np
 import io
 import time
 import json
@@ -49,48 +49,74 @@ class TritonPythonModel:
         print("Handle requests...")
         for request in requests:
             try:
-                prompt = str(pb_utils.get_input_tensor_by_name(request, "prompt").as_numpy()[0].decode("utf-8"))
-                print(f'[DEBUG] input `prompt` type({type(prompt)}): {prompt}')
+                if pb_utils.get_input_tensor_by_name(request, "prompt") is not None:
+                    prompt = str(pb_utils.get_input_tensor_by_name(request, "prompt").as_numpy()[0].decode("utf-8"))
+                    print(f'[DEBUG] input `prompt` type({type(prompt)}): {prompt}')
+                else:
+                    print(f'[DEBUG] input `prompt` is None')
+                    prompt = ""
 
                 # TODO: check model backend send in which format
-                prompt_image = pb_utils.get_input_tensor_by_name(request, "prompt_image").as_numpy()[0]
-                print(f'[DEBUG] input `prompt_image` type({type(prompt_image)}): {len(prompt_image)}')
-
-                extra_params_str = str(pb_utils.get_input_tensor_by_name(request, "extra_params").as_numpy()[0].decode("utf-8"))
-                # TODO: pb_utils.get_input_tensor_by_name(request, "extra_params") would be none, handle it?
-                # extra_params_str = str(pb_utils.get_input_tensor_by_name(request, "extra_params").as_numpy()[0].decode("utf-8"))
-                # AttributeError: 'NoneType' object has no attribute 'as_numpy'
-                print(f'[DEBUG] input `extra_params` type({type(extra_params_str)}): {extra_params_str}')
-
-                extra_params = {}
-                # TODO: Add a function handle penalty
-                try:
-                    extra_params = json.loads(extra_params_str)
-                except json.decoder.JSONDecodeError:
-                    pass
-
-
-                max_new_tokens = int(pb_utils.get_input_tensor_by_name(request, "max_new_tokens").as_numpy()[0])
-                print(f'[DEBUG] input `max_new_tokens` type({type(max_new_tokens)}): {max_new_tokens}')
-
-                top_k = int(pb_utils.get_input_tensor_by_name(request, "top_k").as_numpy()[0])
-                print(f'[DEBUG] input `top_k` type({type(top_k)}): {top_k}')
-
-                temperature = float(pb_utils.get_input_tensor_by_name(request, "temperature").as_numpy()[0])
-                print(f'[DEBUG] input `temperature` type({type(temperature)}): {temperature}')
-
-                random_seed = int(pb_utils.get_input_tensor_by_name(request, "random_seed").as_numpy()[0])
-                print(f'[DEBUG] input `random_seed` type({type(random_seed)}): {random_seed}')
-
-                stop_words = pb_utils.get_input_tensor_by_name(request, "stop_words").as_numpy()
-                print(f'[DEBUG] input `stop_words` type({type(stop_words)}): {stop_words}')
-                if len(stop_words) == 0:
-                    stop_words = None
-                elif stop_words.shape[0] > 1:
-                    # TODO: Check wether shoule we decode this words
-                    stop_words = list(stop_words)
+                if pb_utils.get_input_tensor_by_name(request, "prompt_image") is not None:
+                    prompt_image = pb_utils.get_input_tensor_by_name(request, "prompt_image").as_numpy()[0]
+                    print(f'[DEBUG] input `prompt_image` type({type(prompt_image)}): {len(prompt_image)}')
                 else:
-                    stop_words = [str(stop_words[0])]
+                    print(f'[DEBUG] input `prompt_image` is None')
+                    prompt_image = ""
+
+                if pb_utils.get_input_tensor_by_name(request, "extra_params") is not None:
+                    extra_params_str = str(pb_utils.get_input_tensor_by_name(request, "extra_params").as_numpy()[0].decode("utf-8"))
+                    # TODO: pb_utils.get_input_tensor_by_name(request, "extra_params") would be none, handle it?
+                    # extra_params_str = str(pb_utils.get_input_tensor_by_name(request, "extra_params").as_numpy()[0].decode("utf-8"))
+                    # AttributeError: 'NoneType' object has no attribute 'as_numpy'
+                    print(f'[DEBUG] input `extra_params` type({type(extra_params_str)}): {extra_params_str}')
+
+                    extra_params = {}
+                    # TODO: Add a function handle penalty
+                    try:
+                        extra_params = json.loads(extra_params_str)
+                    except json.decoder.JSONDecodeError:
+                        pass
+                else:
+                    print(f'[DEBUG] input `extra_params` is None')
+                    extra_params = {}
+
+                if pb_utils.get_input_tensor_by_name(request, "max_new_tokens") is not None:
+                    max_new_tokens = int(pb_utils.get_input_tensor_by_name(request, "max_new_tokens").as_numpy()[0])
+                    print(f'[DEBUG] input `max_new_tokens` type({type(max_new_tokens)}): {max_new_tokens}')
+                else:
+                    print(f'[DEBUG] input `max_new_tokens` is None')
+                    max_new_tokens = None
+                
+                if pb_utils.get_input_tensor_by_name(request, "top_k") is not None:
+                    top_k = int(pb_utils.get_input_tensor_by_name(request, "top_k").as_numpy()[0])
+                    print(f'[DEBUG] input `top_k` type({type(top_k)}): {top_k}')
+                else:
+                    print(f'[DEBUG] input `top_k` is None')
+                    top_k = None
+
+                # temperature = float(pb_utils.get_input_tensor_by_name(request, "temperature").as_numpy()[0])
+                # print(f'[DEBUG] input `temperature` type({type(temperature)}): {temperature}')
+                if pb_utils.get_input_tensor_by_name(request, "random_seed") is not None:
+                    random_seed = int(pb_utils.get_input_tensor_by_name(request, "random_seed").as_numpy()[0])
+                    print(f'[DEBUG] input `random_seed` type({type(random_seed)}): {random_seed}')
+                else:
+                    print(f'[DEBUG] input `random_seed` is None')
+                    random_seed = None
+                
+                if pb_utils.get_input_tensor_by_name(request, "stop_words") is not None:
+                    stop_words = pb_utils.get_input_tensor_by_name(request, "stop_words").as_numpy()
+                    print(f'[DEBUG] input `stop_words` type({type(stop_words)}): {stop_words}')
+                    if len(stop_words) == 0:
+                        stop_words = None
+                    elif stop_words.shape[0] > 1:
+                        # TODO: Check wether shoule we decode this words
+                        stop_words = list(stop_words)
+                    else:
+                        stop_words = [str(stop_words[0])]
+                else:
+                    print(f'[DEBUG] input `stop_words` is None')
+                    stop_words = None
 
 
                 raise ValueError("test")
