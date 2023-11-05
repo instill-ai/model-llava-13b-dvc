@@ -79,6 +79,7 @@ class TritonPythonModel:
                         pass
                 else:
                     print(f'[DEBUG] input `extra_params` is None')
+                    extra_params_str = ""
                     extra_params = {}
 
                 if pb_utils.get_input_tensor_by_name(request, "max_new_tokens") is not None:
@@ -95,8 +96,13 @@ class TritonPythonModel:
                     print(f'[DEBUG] input `top_k` is None')
                     top_k = None
 
-                # temperature = float(pb_utils.get_input_tensor_by_name(request, "temperature").as_numpy()[0])
-                # print(f'[DEBUG] input `temperature` type({type(temperature)}): {temperature}')
+                if pb_utils.get_input_tensor_by_name(request, "temperature") is not None:
+                    temperature = float(pb_utils.get_input_tensor_by_name(request, "temperature").as_numpy()[0])
+                    print(f'[DEBUG] input `temperature` type({type(temperature)}): {temperature}')
+                else:
+                    print(f'[DEBUG] input `temperature` is None')
+                    temperature = None
+
                 if pb_utils.get_input_tensor_by_name(request, "random_seed") is not None:
                     random_seed = int(pb_utils.get_input_tensor_by_name(request, "random_seed").as_numpy()[0])
                     print(f'[DEBUG] input `random_seed` type({type(random_seed)}): {random_seed}')
@@ -117,6 +123,23 @@ class TritonPythonModel:
                 else:
                     print(f'[DEBUG] input `stop_words` is None')
                     stop_words = None
+
+                text_outputs = []
+                concated_complete_output = "\n".join([
+                    f'[DEBUG] input `prompt` type({type(prompt)}): {prompt}',
+                    f'[DEBUG] input `prompt_image` type({type(prompt_image)}): {len(prompt_image)}',
+                    f'[DEBUG] input `extra_params` type({type(extra_params_str)}): {extra_params_str}',
+                    f'[DEBUG] input `temperature` type({type(temperature)}): {temperature}',
+                    f'[DEBUG] input `max_new_tokens` type({type(max_new_tokens)}): {max_new_tokens}',
+                    f'[DEBUG] input `top_k` type({type(top_k)}): {top_k}',
+                    f'[DEBUG] input `random_seed` type({type(random_seed)}): {random_seed}',
+                    f'[DEBUG] input `stop_words` type({type(stop_words)}): {stop_words}'
+                ])
+                text_outputs.append(concated_complete_output.encode("utf-8"))
+                triton_output_tensor = pb_utils.Tensor(
+                    "text", np.asarray(text_outputs, dtype=self.output0_dtype)
+                )
+                responses.append(pb_utils.InferenceResponse(output_tensors=[triton_output_tensor]))
 
 
                 raise ValueError("test")
