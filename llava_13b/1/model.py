@@ -69,7 +69,8 @@ class TritonPythonModel:
                 # put base64 encoded prompt image into bytes?
                 image = None 
                 # image_data = base64.b64decode(prompt_image)
-                image = Image.open(io.BytesIO(prompt_image.astype(bytes)))  # RGB
+                # image = Image.open(io.BytesIO(prompt_image.astype(bytes)))  # RGB
+                image = Image.open(io.BytesIO(prompt_image))  # RGB
                 print('np.array(pil_img).shape:', np.array(pil_img).shape)
 
                 if pb_utils.get_input_tensor_by_name(request, "extra_params") is not None:
