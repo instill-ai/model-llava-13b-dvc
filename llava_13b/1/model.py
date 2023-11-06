@@ -155,10 +155,11 @@ class TritonPythonModel:
                 # TODO: Option for only-text input
                 # TODO: Check wether protobuf satisfy the format
                 # TODO: Should we resize the image?
-                image = None
-                image_data = base64.b64decode(prompt_image)
-                image = Image.open(io.BytesIO(image_data))
-
+                # image = None
+                # image_data = base64.b64decode(prompt_image)
+                # image = Image.open(io.BytesIO(image_data))
+                image = Image.open(io.BytesIO(prompt_image))  # RGB
+                
                 image_tensor = process_images([image], image_processor, {"image_aspect_ratio": 'pad'})
                 if type(image_tensor) is list:
                     image_tensor = [image.to(self.model.device, dtype=torch.float16) for image in image_tensor]
