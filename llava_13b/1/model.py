@@ -140,9 +140,6 @@ class TritonPythonModel:
                     "text", np.asarray(text_outputs, dtype=self.output0_dtype)
                 )
                 responses.append(pb_utils.InferenceResponse(output_tensors=[triton_output_tensor]))
-
-
-                raise ValueError("test")
             except Exception as e:
                 self.logger.log_info(f"Error generating stream: {e}")
                 print("DEBUG\n", traceback.format_exc())
