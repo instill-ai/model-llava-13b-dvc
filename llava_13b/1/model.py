@@ -156,24 +156,24 @@ class TritonPythonModel:
                 # TODO: Check wether protobuf satisfy the format
                 # TODO: Should we resize the image?
                 # image = None
-                # image_data = base64.b64decode(prompt_image)
-                # image = Image.open(io.BytesIO(image_data))
+                # image = Image.open(io.BytesIO(base64.b64decode(prompt_image)))
                 image = Image.open(io.BytesIO(prompt_image))  # RGB
-                
-                image_tensor = process_images([image], image_processor, {"image_aspect_ratio": 'pad'})
-                if type(image_tensor) is list:
-                    image_tensor = [image.to(self.model.device, dtype=torch.float16) for image in image_tensor]
-                else:
-                    image_tensor = image_tensor.to(self.model.device, dtype=torch.float16)
+
+                image_tensor = process_images(
+                    [image],
+                    image_processor,
+                    {"image_aspect_ratio": 'pad'}
+                ).to(self.model.device, dtype=torch.float16)
+
 
                 if image is not None:
-                    inp = prompt
-                    inp = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + '\n' + inp
+                    inp = DEFAULT_IMAGE_TOKEN + '\n' + prompt
                     conv.append_message(conv.roles[0], inp)
                 conv.append_message(conv.roles[1], None)
 
+                target_prompt = conv.get_prompt()
                 input_ids = tokenizer_image_token(
-                    prompt,
+                    target_prompt,
                     self.tokenizer,
                     IMAGE_TOKEN_INDEX,
                     return_tensors='pt'
@@ -193,10 +193,12 @@ class TritonPythonModel:
                     temperature=temperature,
                     top_k=top_k,
                     max_new_tokens=max_new_tokens,
-                    use_cache=True,
+                    use_cache=False,
                     **extra_params
                 )
                 self.logger.log_info(f'Inference time cost {time.time()-t0}s with input lenth {len(prompt)}')
+
+                output_ids[output_ids == -200] = 0
                 outputs = self.tokenizer.decode(
                     output_ids[0, input_ids.shape[1]:],
                     skip_special_tokens = True
