@@ -7,6 +7,8 @@ import json
 import base64
 from pathlib import Path
 
+from PIL import Image
+
 # triton_python_backend_utils is available in every Triton Python model. You
 # need to use this module to create inference requests and responses. It also
 # contains some utility functions for extracting information from model_config
@@ -63,6 +65,12 @@ class TritonPythonModel:
                 else:
                     print(f'[DEBUG] input `prompt_image` is None')
                     prompt_image = ""
+
+                # put base64 encoded prompt image into bytes?
+                image = None 
+                # image_data = base64.b64decode(prompt_image)
+                image = Image.open(io.BytesIO(prompt_image.astype(bytes)))  # RGB
+                print('np.array(pil_img).shape:', np.array(pil_img).shape)
 
                 if pb_utils.get_input_tensor_by_name(request, "extra_params") is not None:
                     extra_params_str = str(pb_utils.get_input_tensor_by_name(request, "extra_params").as_numpy()[0].decode("utf-8"))
