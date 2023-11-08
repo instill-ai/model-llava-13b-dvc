@@ -25,7 +25,7 @@ import triton_python_backend_utils as pb_utils
 
 from llava.utils import disable_torch_init
 from llava.model.language_model.llava_llama import LlavaLlamaForCausalLM
-from llava.conversation import conv_templates
+from llava.conversation import conv_templates, Conversation, SeparatorStyle
 from llava.constants import (
     IMAGE_TOKEN_INDEX,
     DEFAULT_IMAGE_TOKEN,
@@ -62,7 +62,8 @@ class TritonPythonModel:
         self.model_config = json.loads(args["model_config"])
 
         # Load the model
-        model_path = str(Path(__file__).parent.absolute().joinpath('llava-v1.5-13b'))
+        # model_path = str(Path(__file__).parent.absolute().joinpath('llava-v1.5-13b'))
+        model_path = str(Path(__file__).parent.absolute().joinpath('llava-v1.5-7b'))
         print(f'[DEBUG] load model under path: {model_path}')
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -88,17 +89,15 @@ class TritonPythonModel:
 
         for request in requests:
             try:
-                prompt = str(pb_utils.get_input_tensor_by_name(request, "prompt").as_numpy()[0].decode("utf-8"))
+                prompt = str(pb_utils.get_input_tensor_by_name(request, "prompt").as_numpy()[0][0].decode("utf-8"))
                 print(f'[DEBUG] input `prompt` type({type(prompt)}): {prompt}')
 
-                # TODO: check model backend send in which format
-                prompt_image = pb_utils.get_input_tensor_by_name(request, "prompt_image").as_numpy()[0]
+                prompt_image = pb_utils.get_input_tensor_by_name(request, "prompt_image").as_numpy()[0][0]
                 print(f'[DEBUG] input `prompt_image` type({type(prompt_image)}): {len(prompt_image)}')
 
-                extra_params_str = str(pb_utils.get_input_tensor_by_name(request, "extra_params").as_numpy()[0].decode("utf-8"))
-                # TODO: pb_utils.get_input_tensor_by_name(request, "extra_params") would be none, handle it?
-                # extra_params_str = str(pb_utils.get_input_tensor_by_name(request, "extra_params").as_numpy()[0].decode("utf-8"))
-                # AttributeError: 'NoneType' object has no attribute 'as_numpy'
+                extra_params_str = ""
+                if pb_utils.get_input_tensor_by_name(request, "extra_params") is not None:
+                    extra_params_str = str(pb_utils.get_input_tensor_by_name(request, "extra_params").as_numpy()[0][0].decode("utf-8"))
                 print(f'[DEBUG] input `extra_params` type({type(extra_params_str)}): {extra_params_str}')
 
                 extra_params = {}
@@ -106,19 +105,28 @@ class TritonPythonModel:
                 try:
                     extra_params = json.loads(extra_params_str)
                 except json.decoder.JSONDecodeError:
+                    print('[DEBUG] WARNING `extra_params` parsing faield!')
                     pass
 
-
-                max_new_tokens = int(pb_utils.get_input_tensor_by_name(request, "max_new_tokens").as_numpy()[0])
+                max_new_tokens = 100
+                if pb_utils.get_input_tensor_by_name(request, "max_new_tokens") is not None:
+                    max_new_tokens = int(pb_utils.get_input_tensor_by_name(request, "max_new_tokens").as_numpy()[0])
                 print(f'[DEBUG] input `max_new_tokens` type({type(max_new_tokens)}): {max_new_tokens}')
 
-                top_k = int(pb_utils.get_input_tensor_by_name(request, "top_k").as_numpy()[0])
+                top_k = 1
+                if pb_utils.get_input_tensor_by_name(request, "top_k") is not None:
+                    top_k = int(pb_utils.get_input_tensor_by_name(request, "top_k").as_numpy()[0])
                 print(f'[DEBUG] input `top_k` type({type(top_k)}): {top_k}')
 
-                temperature = float(pb_utils.get_input_tensor_by_name(request, "temperature").as_numpy()[0])
+                temperature = 0.8
+                if pb_utils.get_input_tensor_by_name(request, "temperature") is not None:
+                    temperature = float(pb_utils.get_input_tensor_by_name(request, "temperature").as_numpy()[0])
+                temperature = round(temperature, 2)
                 print(f'[DEBUG] input `temperature` type({type(temperature)}): {temperature}')
 
-                random_seed = int(pb_utils.get_input_tensor_by_name(request, "random_seed").as_numpy()[0])
+                random_seed = 0
+                if pb_utils.get_input_tensor_by_name(request, "random_seed") is not None:
+                    random_seed = int(pb_utils.get_input_tensor_by_name(request, "random_seed").as_numpy()[0])
                 print(f'[DEBUG] input `random_seed` type({type(random_seed)}): {random_seed}')
 
                 if random_seed > 0:
@@ -128,37 +136,78 @@ class TritonPythonModel:
                    if torch.cuda.is_available():
                        torch.cuda.manual_seed_all(random_seed)
 
-                stop_words = pb_utils.get_input_tensor_by_name(request, "stop_words").as_numpy()
+                stop_words = ""
+                if pb_utils.get_input_tensor_by_name(request, "stop_words") is not None:
+                    stop_words = pb_utils.get_input_tensor_by_name(request, "stop_words").as_numpy()[0]
                 print(f'[DEBUG] input `stop_words` type({type(stop_words)}): {stop_words}')
                 if len(stop_words) == 0:
                     stop_words = None
                 elif stop_words.shape[0] > 1:
                     # TODO: Check wether shoule we decode this words
-                    stop_words = list(stop_words)
+                    stop_words = [ word if isinstance(word, str) else word.decode("utf-8") for word in stop_words]
                 else:
-                    stop_words = [str(stop_words[0])]
+                    stop_words = [str(stop_words[0].decode("utf-8"))]
 
-
-                vision_tower = self.model.get_vision_tower()
-                if not vision_tower.is_loaded:
-                    vision_tower.load_model()
-                vision_tower = vision_tower.to(device='cuda', dtype=torch.float16)
-                image_processor = vision_tower.image_processor
+                if stop_words is not None:
+                    stopping_criteria = KeywordsStoppingCriteria(stop_words, self.tokenizer, input_ids)
+                    extra_params['stopping_criteria'] = [stopping_criteria]
 
                 # Handle Conversation
-                # TODO: Check if conversation_prompt in parametes, if yes, don't use conv_templates
                 conv_mode = "llava_llama_2"
-                conv = conv_templates[conv_mode].copy()
+                prompt_in_conversation = False
+                try:
+                    parsed_conversation = json.loads(prompt)
+                    # turn in to converstation?
+
+                    # using fixed roles
+                    roles = ['USER', 'ASSISTANT']
+                    roles_lookup = {x: i for i, x in enumerate(roles)}
+
+                    conv = None
+                    for i, x in enumerate(parsed_conversation):
+                        role = str(x['role']).upper()
+                        print(f'[DEBUG] Message {i}: {role}: {x["content"]}')
+                        if i == 0:
+                            if role == 'SYSTEM':
+                                conv = Conversation(
+                                    system=str(x['content']),
+                                    roles=("USER", "ASSISTANT"),
+                                    version="llama_v2",
+                                    messages=[],
+                                    offset=0,
+                                    sep_style=SeparatorStyle.LLAMA_2,
+                                    sep="<s>",
+                                    sep2="</s>",
+                                )
+                            else:
+                                conv = conv_templates[conv_mode].copy()
+                                conv.roles = tuple(roles)
+                                conv.append_message(conv.roles[roles_lookup[role]], x['content'])
+                        else:
+                            conv.append_message(conv.roles[roles_lookup[role]], x['content'])
+                    prompt_in_conversation = True
+                except json.decoder.JSONDecodeError:
+                    pass
+
+                if not prompt_in_conversation:
+                    conv = conv_templates[conv_mode].copy()
+                    conv.append_message(conv.roles[0], prompt)
                 roles = conv.roles
 
                 # Handle Image
                 # TODO: Option for only-text input
                 # TODO: Check wether protobuf satisfy the format
                 # TODO: Should we resize the image?
+                # Handle image
+                vision_tower = self.model.get_vision_tower()
+                if not vision_tower.is_loaded:
+                    vision_tower.load_model()
+                vision_tower = vision_tower.to(device='cuda', dtype=torch.float16)
+                image_processor = vision_tower.image_processor
+
                 # image = None
                 # image = Image.open(io.BytesIO(base64.b64decode(prompt_image)))
                 image = Image.open(io.BytesIO(prompt_image))  # RGB
-
                 image_tensor = process_images(
                     [image],
                     image_processor,
@@ -179,9 +228,6 @@ class TritonPythonModel:
                     return_tensors='pt'
                 ).unsqueeze(0).cuda()
 
-                if stop_words is not None:
-                    stopping_criteria = KeywordsStoppingCriteria(stop_words, self.tokenizer, input_ids)
-                    extra_params['stopping_criteria'] = [stopping_criteria]
                 # Inference
                 # https://huggingface.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig
                 # https://huggingface.co/docs/transformers/v4.30.1/en/main_classes/text_generation#transformers.GenerationConfig
