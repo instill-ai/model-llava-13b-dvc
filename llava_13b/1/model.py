@@ -2,7 +2,7 @@
 import os
 import random
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
-
+# os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 import traceback
 
@@ -14,6 +14,7 @@ from pathlib import Path
 from PIL import Image
 
 import numpy as np
+import transformers
 from transformers import AutoTokenizer
 import torch
 
@@ -64,19 +65,22 @@ class TritonPythonModel:
         # Load the model
         # model_path = str(Path(__file__).parent.absolute().joinpath('llava-v1.5-13b'))
         model_path = str(Path(__file__).parent.absolute().joinpath('llava-v1.5-7b'))
-        print(f'[DEBUG] load model under path: {model_path}')
+        self.logger.log_info(f'[DEBUG] load model under path: {model_path}')
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,
-            use_fast=False,
-            device_map="auto",
+            use_fast=False
         )
-
+        self.logger.log_info(f'[DEBUG] self.tokenizer.pad_token: {self.tokenizer.pad_token}')
+        self.logger.log_info(f'[DEBUG] self.tokenizer.eos_token: {self.tokenizer.eos_token}')
+        self.logger.log_info(f'[DEBUG] transformers version: {transformers.__version__}')
+        self.logger.log_info(f'[DEBUG] torch version: {torch.__version__}')
+        
         self.model = LlavaLlamaForCausalLM.from_pretrained(
             model_path,
             low_cpu_mem_usage=True,
             device_map="auto", # "cpu"
-            max_memory={0: "12GB", 1: "12GB", 2: "12GB", 3: "12GB"},
+            # max_memory={0: "12GB", 1: "12GB", 2: "12GB", 3: "12GB"},
             torch_dtype=torch.float16
         )
 
@@ -85,49 +89,53 @@ class TritonPythonModel:
         self.output0_dtype = pb_utils.triton_string_to_numpy(output0_config["data_type"])
 
     def execute(self, requests):
+        disable_torch_init()
         responses = []
 
         for request in requests:
             try:
-                prompt = str(pb_utils.get_input_tensor_by_name(request, "prompt").as_numpy()[0][0].decode("utf-8"))
-                print(f'[DEBUG] input `prompt` type({type(prompt)}): {prompt}')
+                prompt = str(pb_utils.get_input_tensor_by_name(request, "prompt").as_numpy()[0].decode("utf-8"))
+                self.logger.log_info(f'[DEBUG] input `prompt` type({type(prompt)}): {prompt}')
 
-                prompt_image = pb_utils.get_input_tensor_by_name(request, "prompt_image").as_numpy()[0][0]
-                print(f'[DEBUG] input `prompt_image` type({type(prompt_image)}): {len(prompt_image)}')
+                prompt_image = pb_utils.get_input_tensor_by_name(request, "prompt_image").as_numpy()[0]
+                self.logger.log_info(f'[DEBUG] input `prompt_image` type({type(prompt_image)}): {len(prompt_image)}')
 
                 extra_params_str = ""
                 if pb_utils.get_input_tensor_by_name(request, "extra_params") is not None:
-                    extra_params_str = str(pb_utils.get_input_tensor_by_name(request, "extra_params").as_numpy()[0][0].decode("utf-8"))
-                print(f'[DEBUG] input `extra_params` type({type(extra_params_str)}): {extra_params_str}')
+                    extra_params_str = str(pb_utils.get_input_tensor_by_name(request, "extra_params").as_numpy()[0].decode("utf-8"))
+                self.logger.log_info(f'[DEBUG] input `extra_params` type({type(extra_params_str)}): {extra_params_str}')
 
                 extra_params = {}
                 # TODO: Add a function handle penalty
                 try:
                     extra_params = json.loads(extra_params_str)
+                    if 'repetition_penalty' in extra_params:
+                        self.logger.log_info('[DEBUG] WARNING `repetition_penalty` would crash transformerparsing faield!')
+                        del extra_params['repetition_penalty']
                 except json.decoder.JSONDecodeError:
-                    print('[DEBUG] WARNING `extra_params` parsing faield!')
+                    self.logger.log_info('[DEBUG] WARNING `extra_params` parsing faield!')
                     pass
 
                 max_new_tokens = 100
                 if pb_utils.get_input_tensor_by_name(request, "max_new_tokens") is not None:
                     max_new_tokens = int(pb_utils.get_input_tensor_by_name(request, "max_new_tokens").as_numpy()[0])
-                print(f'[DEBUG] input `max_new_tokens` type({type(max_new_tokens)}): {max_new_tokens}')
+                self.logger.log_info(f'[DEBUG] input `max_new_tokens` type({type(max_new_tokens)}): {max_new_tokens}')
 
                 top_k = 1
                 if pb_utils.get_input_tensor_by_name(request, "top_k") is not None:
                     top_k = int(pb_utils.get_input_tensor_by_name(request, "top_k").as_numpy()[0])
-                print(f'[DEBUG] input `top_k` type({type(top_k)}): {top_k}')
+                self.logger.log_info(f'[DEBUG] input `top_k` type({type(top_k)}): {top_k}')
 
                 temperature = 0.8
                 if pb_utils.get_input_tensor_by_name(request, "temperature") is not None:
                     temperature = float(pb_utils.get_input_tensor_by_name(request, "temperature").as_numpy()[0])
                 temperature = round(temperature, 2)
-                print(f'[DEBUG] input `temperature` type({type(temperature)}): {temperature}')
+                self.logger.log_info(f'[DEBUG] input `temperature` type({type(temperature)}): {temperature}')
 
                 random_seed = 0
                 if pb_utils.get_input_tensor_by_name(request, "random_seed") is not None:
                     random_seed = int(pb_utils.get_input_tensor_by_name(request, "random_seed").as_numpy()[0])
-                print(f'[DEBUG] input `random_seed` type({type(random_seed)}): {random_seed}')
+                self.logger.log_info(f'[DEBUG] input `random_seed` type({type(random_seed)}): {random_seed}')
 
                 if random_seed > 0:
                    random.seed(random_seed)
@@ -139,7 +147,7 @@ class TritonPythonModel:
                 stop_words = ""
                 if pb_utils.get_input_tensor_by_name(request, "stop_words") is not None:
                     stop_words = pb_utils.get_input_tensor_by_name(request, "stop_words").as_numpy()[0]
-                print(f'[DEBUG] input `stop_words` type({type(stop_words)}): {stop_words}')
+                self.logger.log_info(f'[DEBUG] input `stop_words` type({type(stop_words)}): {stop_words}')
                 if len(stop_words) == 0:
                     stop_words = None
                 elif stop_words.shape[0] > 1:
@@ -147,26 +155,20 @@ class TritonPythonModel:
                     stop_words = [ word if isinstance(word, str) else word.decode("utf-8") for word in stop_words]
                 else:
                     stop_words = [str(stop_words[0].decode("utf-8"))]
-
-                if stop_words is not None:
-                    stopping_criteria = KeywordsStoppingCriteria(stop_words, self.tokenizer, input_ids)
-                    extra_params['stopping_criteria'] = [stopping_criteria]
-
+                self.logger.log_info(f'[DEBUG] parsed input `stop_words` type({type(stop_words)}): {stop_words}')
+                
                 # Handle Conversation
                 conv_mode = "llava_llama_2"
                 prompt_in_conversation = False
                 try:
                     parsed_conversation = json.loads(prompt)
-                    # turn in to converstation?
-
                     # using fixed roles
                     roles = ['USER', 'ASSISTANT']
                     roles_lookup = {x: i for i, x in enumerate(roles)}
-
                     conv = None
                     for i, x in enumerate(parsed_conversation):
                         role = str(x['role']).upper()
-                        print(f'[DEBUG] Message {i}: {role}: {x["content"]}')
+                        self.logger.log_info(f'[DEBUG] Message {i}: {role}: {x["content"]}')
                         if i == 0:
                             if role == 'SYSTEM':
                                 conv = Conversation(
@@ -189,11 +191,9 @@ class TritonPythonModel:
                 except json.decoder.JSONDecodeError:
                     pass
 
-                if not prompt_in_conversation:
+                if not prompt_in_conversation or conv is None:
                     conv = conv_templates[conv_mode].copy()
-                    conv.append_message(conv.roles[0], prompt)
-                roles = conv.roles
-
+                    
                 # Handle Image
                 # TODO: Option for only-text input
                 # TODO: Check wether protobuf satisfy the format
@@ -208,19 +208,24 @@ class TritonPythonModel:
                 # image = None
                 # image = Image.open(io.BytesIO(base64.b64decode(prompt_image)))
                 image = Image.open(io.BytesIO(prompt_image))  # RGB
+                self.logger.log_info(f"np.array(image).shape: {np.array(image).shape}")
+                self.logger.log_info(f"self.model.device: {self.model.device}")
                 image_tensor = process_images(
                     [image],
                     image_processor,
                     {"image_aspect_ratio": 'pad'}
                 ).to(self.model.device, dtype=torch.float16)
+                self.logger.log_info(f"image_tensor.shape: {image_tensor.shape}")
 
 
-                if image is not None:
-                    inp = DEFAULT_IMAGE_TOKEN + '\n' + prompt
-                    conv.append_message(conv.roles[0], inp)
+                # if image is not None:
+                inp = DEFAULT_IMAGE_TOKEN + '\n' + prompt
+                conv.append_message(conv.roles[0], inp)
                 conv.append_message(conv.roles[1], None)
 
                 target_prompt = conv.get_prompt()
+                self.logger.log_info('[DEBUG] target_prompt:\n>>>>>>>>>>>>>>>>>>>\n' + target_prompt)
+                self.logger.log_info("<<<<<<<<<<<<<<<<<<<")
                 input_ids = tokenizer_image_token(
                     target_prompt,
                     self.tokenizer,
@@ -228,29 +233,49 @@ class TritonPythonModel:
                     return_tensors='pt'
                 ).unsqueeze(0).cuda()
 
+                if stop_words is not None:
+                    # stopping_criteria = KeywordsStoppingCriteria(stop_words, self.tokenizer, input_ids)
+                    # extra_params['stopping_criteria'] = [stopping_criteria]
+                    self.logger.log_info(f"[DEBUG] stop_words: {stop_words}")
+                    self.logger.log_info("Skipping stopping_criteria")
+
                 # Inference
                 # https://huggingface.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig
                 # https://huggingface.co/docs/transformers/v4.30.1/en/main_classes/text_generation#transformers.GenerationConfig
+                
+                # PROBLEM FOUND ... input_id not being handled
+                # input_ids[input_ids == -200] = 0 # test idea of image token
+                self.logger.log_info(f"input_ids: {input_ids.shape}")
+                self.logger.log_info(f"{input_ids}")
+                self.logger.log_info(f"image_tensor: {image_tensor.shape}")
+                self.logger.log_info(f"{image_tensor}")
+                self.logger.log_info("Skipping stopping_criteria")
                 t0 = time.time() # calculate time cost in following function call
-                output_ids = self.model.generate(
-                    input_ids,
-                    images=image_tensor.unsqueeze(0).half().cuda(),
-                    do_sample=True,
-                    temperature=temperature,
-                    top_k=top_k,
-                    max_new_tokens=max_new_tokens,
-                    use_cache=False,
-                    **extra_params
-                )
+
+                with torch.inference_mode():
+                    output_ids = self.model.generate(
+                        input_ids,
+                        images=image_tensor.unsqueeze(0).half().cuda(),
+                        do_sample=True,
+                        temperature=temperature,
+                        # top_k=top_k,
+                        max_new_tokens=max_new_tokens,
+                        use_cache=False,
+                        **extra_params
+                    )
                 self.logger.log_info(f'Inference time cost {time.time()-t0}s with input lenth {len(prompt)}')
 
-                output_ids[output_ids == -200] = 0
+                # output_ids[output_ids == -200] = 0
                 outputs = self.tokenizer.decode(
                     output_ids[0, input_ids.shape[1]:],
                     skip_special_tokens = True
                 ).strip()
-                print(type(outputs))
-                print('-'*100, "\n[DEBUG]", {"prompt": prompt, "outputs": outputs.encode('utf-8')}, "\n")
+                self.logger.log_info(f'{type(outputs)}')
+                self.logger.log_info("[DEBUG] Prompt:")
+                self.logger.log_info(f"{prompt}")
+                self.logger.log_info("[DEBUG] outputs:")
+                self.logger.log_info(f"{outputs.encode('utf-8')}")
+                self.logger.log_info('-'*100)
 
                 text_outputs = [outputs, ]
                 triton_output_tensor = pb_utils.Tensor(
@@ -260,7 +285,7 @@ class TritonPythonModel:
 
             except Exception as e:
                 self.logger.log_info(f"Error generating stream: {e}")
-                print("DEBUG\n", traceback.format_exc())
+                self.logger.log_info(f"{traceback.format_exc()}")
 
                 error = pb_utils.TritonError(f"Error generating stream: {e}")
                 triton_output_tensor = pb_utils.Tensor(
