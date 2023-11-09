@@ -121,7 +121,7 @@ class TritonPythonModel:
                     max_new_tokens = int(pb_utils.get_input_tensor_by_name(request, "max_new_tokens").as_numpy()[0])
                 self.logger.log_info(f'[DEBUG] input `max_new_tokens` type({type(max_new_tokens)}): {max_new_tokens}')
 
-                top_k = 1
+                top_k = 30
                 if pb_utils.get_input_tensor_by_name(request, "top_k") is not None:
                     top_k = int(pb_utils.get_input_tensor_by_name(request, "top_k").as_numpy()[0])
                 self.logger.log_info(f'[DEBUG] input `top_k` type({type(top_k)}): {top_k}')
@@ -258,7 +258,7 @@ class TritonPythonModel:
                         images=image_tensor.unsqueeze(0).half().cuda(),
                         do_sample=True,
                         temperature=temperature,
-                        # top_k=top_k,
+                        top_k=top_k,
                         max_new_tokens=max_new_tokens,
                         use_cache=False,
                         **extra_params
