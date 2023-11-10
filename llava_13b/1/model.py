@@ -259,7 +259,7 @@ class TritonPythonModel:
                 for _ in range(10):
                     output_ids = self.model.generate(
                         input_ids,
-                        images=image_tensor.unsqueeze(0).half().cuda(),
+                        images=image_tensor,
                         do_sample=True,
                         temperature=temperature,
                         top_k=top_k,
@@ -275,21 +275,20 @@ class TritonPythonModel:
                         skip_special_tokens = True
                     ).strip()
 
-                    if len(outputs) <= 1:
-                        continue
-                    self.logger.log_info(f'{type(outputs)}')
-                    self.logger.log_info("[DEBUG] Prompt:")
-                    self.logger.log_info(f"{prompt}")
-                    self.logger.log_info("[DEBUG] outputs:")
-                    self.logger.log_info(f"{outputs.encode('utf-8')}")
-                    self.logger.log_info('-'*100)
+                    if len(outputs) > 1:
+                        break
+                self.logger.log_info(f'{type(outputs)}')
+                self.logger.log_info("[DEBUG] Prompt:")
+                self.logger.log_info(f"{prompt}")
+                self.logger.log_info("[DEBUG] outputs:")
+                self.logger.log_info(f"{outputs.encode('utf-8')}")
+                self.logger.log_info('-'*100)
 
-                    text_outputs = [outputs, ]
-                    triton_output_tensor = pb_utils.Tensor(
-                        "text", np.asarray(text_outputs, dtype=self.output0_dtype)
-                    )
-                    responses.append(pb_utils.InferenceResponse(output_tensors=[triton_output_tensor]))
-                    break
+                text_outputs = [outputs, ]
+                triton_output_tensor = pb_utils.Tensor(
+                    "text", np.asarray(text_outputs, dtype=self.output0_dtype)
+                )
+                responses.append(pb_utils.InferenceResponse(output_tensors=[triton_output_tensor]))
             except Exception as e:
                 self.logger.log_info(f"Error generating stream: {e}")
                 self.logger.log_info(f"{traceback.format_exc()}")
