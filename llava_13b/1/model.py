@@ -250,7 +250,7 @@ class TritonPythonModel:
                 self.logger.log_info(f"image_tensor: {image_tensor.shape}")
                 self.logger.log_info(f"{image_tensor}")
                 self.logger.log_info("Skipping stopping_criteria")
-                image_tensor = image_tensor.unsqueeze(0).half().cuda()
+                # image_tensor = image_tensor.unsqueeze(0).half().cuda()
                 self.logger.log_info(f"image_tensor: {image_tensor.shape}")
                 self.logger.log_info(f"{image_tensor}")
 
