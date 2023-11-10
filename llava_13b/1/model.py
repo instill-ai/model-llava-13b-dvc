@@ -89,7 +89,7 @@ class TritonPythonModel:
         self.output0_dtype = pb_utils.triton_string_to_numpy(output0_config["data_type"])
 
     def execute(self, requests):
-        disable_torch_init()
+        # disable_torch_init()
         responses = []
 
         for request in requests:
@@ -250,9 +250,13 @@ class TritonPythonModel:
                 self.logger.log_info(f"image_tensor: {image_tensor.shape}")
                 self.logger.log_info(f"{image_tensor}")
                 self.logger.log_info("Skipping stopping_criteria")
+                image_tensor = image_tensor.unsqueeze(0).half().cuda()
+                self.logger.log_info(f"image_tensor: {image_tensor.shape}")
+                self.logger.log_info(f"{image_tensor}")
+
                 t0 = time.time() # calculate time cost in following function call
 
-                with torch.inference_mode():
+                for _ in range(10):
                     output_ids = self.model.generate(
                         input_ids,
                         images=image_tensor.unsqueeze(0).half().cuda(),
@@ -263,26 +267,29 @@ class TritonPythonModel:
                         use_cache=False,
                         **extra_params
                     )
-                self.logger.log_info(f'Inference time cost {time.time()-t0}s with input lenth {len(prompt)}')
+                    self.logger.log_info(f'Inference time cost {time.time()-t0}s with input lenth {len(prompt)}')
 
-                # output_ids[output_ids == -200] = 0
-                outputs = self.tokenizer.decode(
-                    output_ids[0, input_ids.shape[1]:],
-                    skip_special_tokens = True
-                ).strip()
-                self.logger.log_info(f'{type(outputs)}')
-                self.logger.log_info("[DEBUG] Prompt:")
-                self.logger.log_info(f"{prompt}")
-                self.logger.log_info("[DEBUG] outputs:")
-                self.logger.log_info(f"{outputs.encode('utf-8')}")
-                self.logger.log_info('-'*100)
+                    # output_ids[output_ids == -200] = 0
+                    outputs = self.tokenizer.decode(
+                        output_ids[0, input_ids.shape[1]:],
+                        skip_special_tokens = True
+                    ).strip()
 
-                text_outputs = [outputs, ]
-                triton_output_tensor = pb_utils.Tensor(
-                    "text", np.asarray(text_outputs, dtype=self.output0_dtype)
-                )
-                responses.append(pb_utils.InferenceResponse(output_tensors=[triton_output_tensor]))
+                    if len(outputs) <= 1:
+                        continue
+                    self.logger.log_info(f'{type(outputs)}')
+                    self.logger.log_info("[DEBUG] Prompt:")
+                    self.logger.log_info(f"{prompt}")
+                    self.logger.log_info("[DEBUG] outputs:")
+                    self.logger.log_info(f"{outputs.encode('utf-8')}")
+                    self.logger.log_info('-'*100)
 
+                    text_outputs = [outputs, ]
+                    triton_output_tensor = pb_utils.Tensor(
+                        "text", np.asarray(text_outputs, dtype=self.output0_dtype)
+                    )
+                    responses.append(pb_utils.InferenceResponse(output_tensors=[triton_output_tensor]))
+                    break
             except Exception as e:
                 self.logger.log_info(f"Error generating stream: {e}")
                 self.logger.log_info(f"{traceback.format_exc()}")
