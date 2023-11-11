@@ -14,8 +14,7 @@ from pathlib import Path
 from PIL import Image
 
 import numpy as np
-import transformers
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoConfig
 import torch
 
 # triton_python_backend_utils is available in every Triton Python model. You
@@ -61,10 +60,11 @@ class TritonPythonModel:
         """
         self.logger = pb_utils.Logger
         self.model_config = json.loads(args["model_config"])
-
+        
+        disable_torch_init()
         # Load the model
-        # model_path = str(Path(__file__).parent.absolute().joinpath('llava-v1.5-13b'))
-        model_path = str(Path(__file__).parent.absolute().joinpath('llava-v1.5-7b'))
+        model_path = str(Path(__file__).parent.absolute().joinpath('llava-v1.5-13b'))
+        # model_path = str(Path(__file__).parent.absolute().joinpath('llava-v1.5-7b'))
         self.logger.log_info(f'[DEBUG] load model under path: {model_path}')
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -73,15 +73,15 @@ class TritonPythonModel:
         )
         self.logger.log_info(f'[DEBUG] self.tokenizer.pad_token: {self.tokenizer.pad_token}')
         self.logger.log_info(f'[DEBUG] self.tokenizer.eos_token: {self.tokenizer.eos_token}')
-        self.logger.log_info(f'[DEBUG] transformers version: {transformers.__version__}')
         self.logger.log_info(f'[DEBUG] torch version: {torch.__version__}')
         
         self.model = LlavaLlamaForCausalLM.from_pretrained(
             model_path,
             low_cpu_mem_usage=True,
             device_map="auto", # "cpu"
+            load_in_8bit=True
             # max_memory={0: "12GB", 1: "12GB", 2: "12GB", 3: "12GB"},
-            torch_dtype=torch.float16
+            # torch_dtype=torch.float16
         )
 
         # Get output configurations
@@ -89,7 +89,6 @@ class TritonPythonModel:
         self.output0_dtype = pb_utils.triton_string_to_numpy(output0_config["data_type"])
 
     def execute(self, requests):
-        disable_torch_init()
         responses = []
 
         for request in requests:
@@ -260,11 +259,11 @@ class TritonPythonModel:
                     output_ids = self.model.generate(
                         input_ids,
                         images=image_tensor,
-                        # do_sample=True,
-                        # temperature=temperature,
-                        # top_k=top_k,
-                        # max_new_tokens=max_new_tokens,
-                        # use_cache=False,
+                        do_sample=True,
+                        temperature=temperature,
+                        top_k=top_k,
+                        max_new_tokens=max_new_tokens,
+                        use_cache=True,
                         **extra_params
                     )
                     self.logger.log_info(f'Inference time cost {time.time()-t0}s with input lenth {len(prompt)}')
