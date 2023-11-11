@@ -89,7 +89,7 @@ class TritonPythonModel:
         self.output0_dtype = pb_utils.triton_string_to_numpy(output0_config["data_type"])
 
     def execute(self, requests):
-        # disable_torch_init()
+        disable_torch_init()
         responses = []
 
         for request in requests:
@@ -260,11 +260,11 @@ class TritonPythonModel:
                     output_ids = self.model.generate(
                         input_ids,
                         images=image_tensor,
-                        do_sample=True,
-                        temperature=temperature,
-                        top_k=top_k,
-                        max_new_tokens=max_new_tokens,
-                        use_cache=False,
+                        # do_sample=True,
+                        # temperature=temperature,
+                        # top_k=top_k,
+                        # max_new_tokens=max_new_tokens,
+                        # use_cache=False,
                         **extra_params
                     )
                     self.logger.log_info(f'Inference time cost {time.time()-t0}s with input lenth {len(prompt)}')
