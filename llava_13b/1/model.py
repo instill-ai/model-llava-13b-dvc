@@ -209,7 +209,7 @@ class TritonPythonModel:
                 # image = Image.open(io.BytesIO(base64.b64decode(prompt_image)))
                 image = Image.open(io.BytesIO(prompt_image))  # RGB
                 self.logger.log_info(f"np.array(image).shape: {np.array(image).shape}")
-                self.logger.log_info(f"self.model.device: {self.model.device}")
+                # self.logger.log_info(f"self.model.device: {self.model.device}")
                 image_tensor = process_images(
                     [image],
                     image_processor,
@@ -256,7 +256,7 @@ class TritonPythonModel:
 
                 t0 = time.time() # calculate time cost in following function call
 
-                for _ in range(10):
+                for _ in range(50):
                     output_ids = self.model.generate(
                         input_ids,
                         images=image_tensor,
