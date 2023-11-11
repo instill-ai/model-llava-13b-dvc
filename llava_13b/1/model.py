@@ -158,40 +158,40 @@ class TritonPythonModel:
                 
                 # Handle Conversation
                 conv_mode = "llava_llama_2"
-                prompt_in_conversation = False
-                try:
-                    parsed_conversation = json.loads(prompt)
-                    # using fixed roles
-                    roles = ['USER', 'ASSISTANT']
-                    roles_lookup = {x: i for i, x in enumerate(roles)}
-                    conv = None
-                    for i, x in enumerate(parsed_conversation):
-                        role = str(x['role']).upper()
-                        self.logger.log_info(f'[DEBUG] Message {i}: {role}: {x["content"]}')
-                        if i == 0:
-                            if role == 'SYSTEM':
-                                conv = Conversation(
-                                    system=str(x['content']),
-                                    roles=("USER", "ASSISTANT"),
-                                    version="llama_v2",
-                                    messages=[],
-                                    offset=0,
-                                    sep_style=SeparatorStyle.LLAMA_2,
-                                    sep="<s>",
-                                    sep2="</s>",
-                                )
-                            else:
-                                conv = conv_templates[conv_mode].copy()
-                                conv.roles = tuple(roles)
-                                conv.append_message(conv.roles[roles_lookup[role]], x['content'])
-                        else:
-                            conv.append_message(conv.roles[roles_lookup[role]], x['content'])
-                    prompt_in_conversation = True
-                except json.decoder.JSONDecodeError:
-                    pass
+                # prompt_in_conversation = False
+                # try:
+                #     parsed_conversation = json.loads(prompt)
+                #     # using fixed roles
+                #     roles = ['USER', 'ASSISTANT']
+                #     roles_lookup = {x: i for i, x in enumerate(roles)}
+                #     conv = None
+                #     for i, x in enumerate(parsed_conversation):
+                #         role = str(x['role']).upper()
+                #         self.logger.log_info(f'[DEBUG] Message {i}: {role}: {x["content"]}')
+                #         if i == 0:
+                #             if role == 'SYSTEM':
+                #                 conv = Conversation(
+                #                     system=str(x['content']),
+                #                     roles=("USER", "ASSISTANT"),
+                #                     version="llama_v2",
+                #                     messages=[],
+                #                     offset=0,
+                #                     sep_style=SeparatorStyle.LLAMA_2,
+                #                     sep="<s>",
+                #                     sep2="</s>",
+                #                 )
+                #             else:
+                #                 conv = conv_templates[conv_mode].copy()
+                #                 conv.roles = tuple(roles)
+                #                 conv.append_message(conv.roles[roles_lookup[role]], x['content'])
+                #         else:
+                #             conv.append_message(conv.roles[roles_lookup[role]], x['content'])
+                #     prompt_in_conversation = True
+                # except json.decoder.JSONDecodeError:
+                #     pass
 
-                if not prompt_in_conversation or conv is None:
-                    conv = conv_templates[conv_mode].copy()
+                # if not prompt_in_conversation or conv is None:
+                conv = conv_templates[conv_mode].copy()
                     
                 # Handle Image
                 # TODO: Option for only-text input
@@ -233,10 +233,16 @@ class TritonPythonModel:
                 ).unsqueeze(0).cuda()
 
                 if stop_words is not None:
+                    
                     # stopping_criteria = KeywordsStoppingCriteria(stop_words, self.tokenizer, input_ids)
                     # extra_params['stopping_criteria'] = [stopping_criteria]
                     self.logger.log_info(f"[DEBUG] stop_words: {stop_words}")
                     self.logger.log_info("Skipping stopping_criteria")
+
+                stop_str = conv.sep if conv.sep_style != SeparatorStyle.TWO else conv.sep2
+                keywords = [stop_str]
+                stopping_criteria = KeywordsStoppingCriteria(keywords, self.tokenizer, input_ids)
+                    
 
                 # Inference
                 # https://huggingface.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig
@@ -261,9 +267,10 @@ class TritonPythonModel:
                         images=image_tensor,
                         do_sample=True,
                         temperature=temperature,
-                        top_k=top_k,
+                        # top_k=top_k,
                         max_new_tokens=max_new_tokens,
                         use_cache=True,
+                        stopping_criteria=[stopping_criteria],
                         **extra_params
                     )
                     self.logger.log_info(f'Inference time cost {time.time()-t0}s with input lenth {len(prompt)}')
