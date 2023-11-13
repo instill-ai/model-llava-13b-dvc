@@ -158,7 +158,8 @@ class TritonPythonModel:
                 self.logger.log_info(f'[DEBUG] parsed input `stop_words` type({type(stop_words)}): {stop_words}')
                 
                 # Handle Conversation
-                conv_mode = "llava_llama_2"
+                # conv_mode = "llava_llama_2"
+                conv_mode = "llava_v1"
                 prompt_in_conversation = False
                 try:
                     parsed_conversation = json.loads(prompt)
