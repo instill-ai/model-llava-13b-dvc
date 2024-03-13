@@ -378,8 +378,8 @@ class Llava:
         conv = conv_templates[conv_mode].copy()
         # Handle Image
         vision_tower = self.model.get_vision_tower()
-        if not vision_tower.is_loaded:
-            vision_tower.load_model()
+        # if not vision_tower.is_loaded:
+        vision_tower.load_model() # alwasy loadig to fix `NotImplementedError: Cannot copy out of meta tensor; no data!`
         vision_tower = vision_tower.to(device="cuda", dtype=torch.float16)
         image_processor = vision_tower.image_processor
 
