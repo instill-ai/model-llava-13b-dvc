@@ -1,0 +1,12 @@
+build:
+  gpu: true
+  python_version: "3.11"
+  python_packages:
+    - torch==2.2.1
+    - sentencepiece==0.1.99
+    - transformers==4.39.2
+    - protobuf==4.24.4
+    - accelerate==0.25.0
+
+repo: admin/llava-1-6-13b-gpu # make sure the format is {user-id}/{model-id} and the
+tag: rev1 # {model-id} match the model namespace created on console

@@ -17,6 +17,24 @@ Notes:
 - GPU Memory Requirements: 30G
 - That some parameters is prohibited by Llava such as `frequency_penalty`
 
+**Create Model**
+
+```json
+{
+    "id": "llava-1-6-13b-gpu",
+    "description": "LLaVa-13b, from liuhaotian, is trained to generate text based on your prompts with miltimodal input.",
+    "model_definition": "model-definitions/container",
+    "visibility": "VISIBILITY_PUBLIC",
+    "region": "REGION_GCP_EUROPE_WEST_4",
+    "hardware": "GPU",
+    "configuration": {
+        "task": "TASK_IMAGE_TO_IMAGE"
+    }
+}
+```
+
+**Inference model**
+
 ```
 {
     "task_inputs": [
