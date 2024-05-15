@@ -1,5 +1,0 @@
-[core]
-    autostage = true
-    remote = gs
-['remote "gs"']
-    url = gs://public-europe-west2-c-artifacts/vdp/public-dvc-models/model-llava-13b-v1-6/hf_v1

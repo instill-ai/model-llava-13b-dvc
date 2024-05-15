@@ -40,11 +40,7 @@ from llava.mm_utils import process_images, tokenizer_image_token
 
 @instill_deployment
 class Llava:
-    def __init__(self, model_path: str):
-        self.application_name = "_".join(model_path.split("/")[3:5])
-        self.deployement_name = model_path.split("/")[4]
-        print(f"application_name: {self.application_name}")
-        print(f"deployement_name: {self.deployement_name}")
+    def __init__(self):
         print(f"torch version: {torch.__version__}")
 
         print(f"torch.cuda.is_available() : {torch.cuda.is_available()}")
@@ -53,7 +49,7 @@ class Llava:
         print(f"torch.cuda.device(0) : {torch.cuda.device(0)}")
         print(f"torch.cuda.get_device_name(0) : {torch.cuda.get_device_name(0)}")
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
+        self.tokenizer = AutoTokenizer.from_pretrained("llava-v1.6-vicuna-13b", use_fast=False)
 
         print(f"[DEBUG] self.tokenizer.pad_token: {self.tokenizer.pad_token}")
         print(f"[DEBUG] self.tokenizer.eos_token: {self.tokenizer.eos_token}")
@@ -61,7 +57,7 @@ class Llava:
         # print(f"[DEBUG] torch version: {torch.__version__}")
 
         self.model = LlavaLlamaForCausalLM.from_pretrained(
-            model_path,
+            "llava-v1.6-vicuna-13b",
             low_cpu_mem_usage=True,
             device_map="auto",  # "cpu"
             # max_memory={0: "12GB", 1: "12GB", 2: "12GB", 3: "12GB"},
@@ -494,11 +490,4 @@ class Llava:
             raw_outputs=[task_output],
         )
 
-
-deployable = InstillDeployable(
-    Llava, model_weight_or_folder_name="llava-v1.6-vicuna-13b/", use_gpu=True
-)
-
-# # Optional
-# deployable.update_max_replicas(2)
-# deployable.update_min_replicas(0)
+entrypoint = InstillDeployable(Llava).get_deployment_handle()

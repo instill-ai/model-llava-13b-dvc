@@ -1,4 +1,1 @@
-*.png
-test.py
-__pycache__/
-examples/
+llava-v1.6-vicuna-13b/
